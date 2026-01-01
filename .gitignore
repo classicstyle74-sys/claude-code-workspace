@@ -1,0 +1,38 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# サムネイル
+._*
+
+# ディレクトリ固有のメタデータ
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# エディタとIDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+.classpath
+
+# ログファイル
+*.log
+
+# 環境設定（機密情報を含む可能性）
+.env
+.env.local
+.env.*.local
+
+# 一時ファイル
+tmp/
+temp/
