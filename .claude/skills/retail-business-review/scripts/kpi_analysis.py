@@ -48,6 +48,17 @@ def fmt_pct(v, digits=1):
     return "N/A" if v is None else f"{v:+.{digits}f}%"
 
 
+def safe_div(a, b):
+    """a/bを返す。どちらかが欠損またはbが0ならNone（推測しない）。"""
+    if a is None or b is None or pd.isna(a) or pd.isna(b) or b == 0:
+        return None
+    return a / b
+
+
+def fmt_num(v, spec=",.0f"):
+    return "N/A" if v is None or pd.isna(v) else format(v, spec)
+
+
 def derive_kpis(df: pd.DataFrame, suffix: str = "") -> pd.DataFrame:
     """Revenue/TR/QuantityからATV・UPT・APを導出する。suffixは '' か '_ly'。"""
     rev, tr, qty = f"revenue{suffix}", f"tr{suffix}", f"quantity{suffix}"
@@ -76,19 +87,19 @@ def store_report(df: pd.DataFrame) -> list[str]:
 
     for name, r in rows:
         rev, tr, qty = r.get("revenue"), r.get("tr"), r.get("quantity")
-        atv = rev / tr if tr else None
-        upt = qty / tr if tr else None
-        ap = rev / qty if qty else None
-        atv_ly = (r.get("revenue_ly") / r.get("tr_ly")) if r.get("tr_ly") else None
-        upt_ly = (r.get("quantity_ly") / r.get("tr_ly")) if r.get("tr_ly") else None
-        ap_ly = (r.get("revenue_ly") / r.get("quantity_ly")) if r.get("quantity_ly") else None
+        atv = safe_div(rev, tr)
+        upt = safe_div(qty, tr)
+        ap = safe_div(rev, qty)
+        atv_ly = safe_div(r.get("revenue_ly"), r.get("tr_ly"))
+        upt_ly = safe_div(r.get("quantity_ly"), r.get("tr_ly"))
+        ap_ly = safe_div(r.get("revenue_ly"), r.get("quantity_ly"))
         lines.append(
-            f"| {name} | {rev:,.0f} | {fmt_pct(pct(rev, r.get('revenue_ly')))} "
+            f"| {name} | {fmt_num(rev)} | {fmt_pct(pct(rev, r.get('revenue_ly')))} "
             f"| {fmt_pct(pct(rev, r.get('budget')))} "
-            f"| {tr:,.0f} | {fmt_pct(pct(tr, r.get('tr_ly')))} "
-            f"| {atv:,.0f} | {fmt_pct(pct(atv, atv_ly))} "
-            f"| {upt:.2f} | {fmt_pct(pct(upt, upt_ly))} "
-            f"| {ap:,.0f} | {fmt_pct(pct(ap, ap_ly))} |"
+            f"| {fmt_num(tr)} | {fmt_pct(pct(tr, r.get('tr_ly')))} "
+            f"| {fmt_num(atv)} | {fmt_pct(pct(atv, atv_ly))} "
+            f"| {fmt_num(upt, '.2f')} | {fmt_pct(pct(upt, upt_ly))} "
+            f"| {fmt_num(ap)} | {fmt_pct(pct(ap, ap_ly))} |"
         )
 
     # Revenue増減のドライバー分解（全社）: ΔRev% ≈ ΔTR% + ΔATV% (+交差項)
