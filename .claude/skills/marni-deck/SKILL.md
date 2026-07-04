@@ -46,16 +46,17 @@ Marni ブランドテンプレート (`assets/Marni_Template.pptx`) のスライ
 
    WARNING が出たら内容を調整して再生成する。
 
-5. **検証** — LibreOffice があれば PDF 化して数枚を目視確認する
-   (テキストのはみ出し・画像の欠落がないか):
+5. **検証(任意、LibreOffice が使える環境のみ)** — PDF 化して数枚を目視確認する
+   (テキストのはみ出し・画像の欠落がないか)。LibreOffice が無い実行環境では
+   このステップは省略してよい(生成自体には影響しない):
 
    ```bash
    soffice --headless --convert-to pdf --outdir /tmp/check output.pptx
    pdftoppm -png -r 60 /tmp/check/output.pdf /tmp/check/s
    ```
 
-   ※ LibreOffice の初回実行で "source file could not be loaded" が出る場合は
-   `HOME` が書き込み可能か確認し、`-env:UserInstallation=file:///tmp/lo-profile` を付ける。
+   ※ "source file could not be loaded" が出る場合は `HOME` が書き込み可能か
+   確認し、`-env:UserInstallation=file:///tmp/lo-profile` を付ける。
 
 6. **納品** — 生成した .pptx をユーザーに渡す。
 
