@@ -17,6 +17,7 @@ import argparse
 import copy
 import json
 import sys
+import unicodedata
 from pathlib import Path
 
 from pptx import Presentation
@@ -196,10 +197,23 @@ def insert_image(shape, image_path, warnings):
         warnings.append(f"シェイプ {shape.name!r} は画像プレースホルダーではない")
 
 
+def display_width(text):
+    """全角文字を 2、半角文字を 1 として数える表示幅。
+
+    references/slide-types.md の文字数目安は半角換算で定義されているため、
+    日本語などの全角文字を含む文章を正しく判定するにはこの幅で比較する
+    必要がある(単純な len() では全角文の超過を見逃す)。
+    """
+    return sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in text)
+
+
 def warn_if_long(warnings, label, text, limit):
-    if text and len(text) > limit:
+    if not text:
+        return
+    width = display_width(text)
+    if width > limit:
         warnings.append(
-            f"{label} が {len(text)} 文字あり目安 ({limit} 文字) を超過。"
+            f"{label} が半角換算 {width} 文字相当あり目安 ({limit} 文字) を超過。"
             "はみ出す可能性があるので内容の分割を検討。"
         )
 
@@ -283,6 +297,14 @@ def main():
     )
     args = parser.parse_args()
 
+    template_path = Path(args.template).resolve()
+    output_path = Path(args.output).resolve()
+    if output_path == template_path:
+        sys.exit(
+            f"出力先がテンプレートと同じパスです: {output_path}\n"
+            "テンプレートを破壊するため中止。--output に別のパスを指定してください。"
+        )
+
     spec = json.loads(Path(args.spec).read_text(encoding="utf-8"))
     slides_spec = spec["slides"]
 
@@ -302,11 +324,10 @@ def main():
     for slide in template_slides:
         delete_slide(prs, slide)
 
-    out = Path(args.output)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    prs.save(str(out))
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    prs.save(str(output_path))
 
-    print(f"OK: {len(slides_spec)} 枚のスライドを {out} に生成")
+    print(f"OK: {len(slides_spec)} 枚のスライドを {output_path} に生成")
     for w in warnings:
         print(f"WARNING: {w}", file=sys.stderr)
 
