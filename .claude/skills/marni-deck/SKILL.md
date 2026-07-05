@@ -58,6 +58,9 @@ Marni ブランドテンプレート (`assets/Marni_Template.pptx`) をベース
    python3 scripts/build_deck.py spec.json -o output.pptx
    ```
 
+   フッター左下の日付("July 26" 等、Month + 下 2 桁年)は実行時の日付を
+   自動反映する。過去日基準で生成したい場合は `--date YYYY-MM-DD` を指定する。
+
    WARNING が出たら内容を調整して再生成する。
 
 5. **検証(任意、LibreOffice が使える環境のみ)** — PDF 化して目視確認する

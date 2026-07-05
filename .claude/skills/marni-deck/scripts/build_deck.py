@@ -17,6 +17,7 @@ import argparse
 import json
 import sys
 import unicodedata
+from datetime import date
 from pathlib import Path
 
 from pptx import Presentation
@@ -24,6 +25,37 @@ from pptx import Presentation
 import marni_kit as kit
 
 TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "assets" / "Marni_Template.pptx"
+
+# スライドマスター/レイアウトのフッターに固定文言で入っている生成月表示。
+# テンプレート内では英語表記 "January 26" (Month + 下 2 桁の年) で埋め込まれて
+# いるため、生成の都度この形式のまま実際の日付に置き換える。
+FOOTER_DATE_TEXT = "January 26"
+MONTH_NAMES = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+]
+
+
+def footer_date_label(d):
+    return f"{MONTH_NAMES[d.month - 1]} {d:%y}"
+
+
+def set_footer_date(prs, label, warnings):
+    """マスター/全レイアウトのフッター日付シェイプを書式維持で更新する。"""
+    containers = list(prs.slide_masters)
+    for master in prs.slide_masters:
+        containers.extend(master.slide_layouts)
+    updated = 0
+    for container in containers:
+        for shape in container.shapes:
+            if shape.has_text_frame and shape.text_frame.text.strip() == FOOTER_DATE_TEXT:
+                kit.fill_text(shape, label)
+                updated += 1
+    if updated == 0:
+        warnings.append(
+            "フッター日付シェイプ ('January 26') が見つからず更新できなかった。"
+            "テンプレートの構造が変わっていないか確認。"
+        )
 
 # テンプレート内のスライド番号 (0 始まり) とシェイプ名の対応表。
 # シェイプ名は Google Slides エクスポート由来で固定。
@@ -329,7 +361,12 @@ def main():
     parser.add_argument(
         "--template", default=str(TEMPLATE_PATH), help="テンプレート PPTX パス"
     )
+    parser.add_argument(
+        "--date", help="フッター日付の基準日 (YYYY-MM-DD)。省略時は実行時点の日付。"
+    )
     args = parser.parse_args()
+
+    footer_date = date.fromisoformat(args.date) if args.date else date.today()
 
     template_path = Path(args.template).resolve()
     output_path = Path(args.output).resolve()
@@ -350,6 +387,8 @@ def main():
     prs = Presentation(args.template)
     template_slides = list(prs.slides)
     warnings = []
+
+    set_footer_date(prs, footer_date_label(footer_date), warnings)
 
     for slide_spec in slides_spec:
         stype = slide_spec["type"]
