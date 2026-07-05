@@ -1,0 +1,30 @@
+{
+  "slides": [
+    {"type": "cover", "title": "2026 Autumn Collection Review"},
+    {"type": "toc", "title": "Table of Content", "items": [
+      {"num": "0.0", "title": "Introduction", "page": "03"},
+      {"num": "1.0", "title": "Brand Vision", "page": "04"},
+      {"num": "2.0", "title": "Collection Highlights", "page": "05"},
+      {"num": "3.0", "title": "Key Looks", "page": "06"},
+      {"num": "4.0", "title": "Retail Strategy", "page": "07"},
+      {"num": "5.0", "title": "Closing Remarks", "page": "09"}
+    ]},
+    {"type": "section_red", "secnum": "1.0", "title": "Brand Vision"},
+    {"type": "section_black", "secnum": "2.0", "title": "Collection Highlights"},
+    {"type": "text_image", "secnum": "2.1", "title": "Concept Overview",
+     "body": "今シーズンのコレクションは、構築的なシルエットと有機的な色彩の対比をテーマに展開する。カラーパレットはブランドの象徴であるレッドを軸に、キャメルとライラックを差し色として使用。素材はリサイクルウールとオーガニックコットンを中心に構成し、サステナビリティへの取り組みを継続する。",
+     "image": "/path/to/image.jpg",
+     "notes": "コンセプトの背景として前シーズンの売上データに触れる"},
+    {"type": "two_images", "secnum": "2.2", "title": "Key Looks", "caption": "Look 01 / Look 02",
+     "images": ["/path/to/image.jpg", "/path/to/image.jpg"]},
+    {"type": "three_columns", "secnum": "3.0", "title": "Product Lines", "band_title": "Three Core Lines",
+     "columns": [
+       {"subtitle": "Ready-to-Wear", "image": "/path/to/image.jpg", "body": "全 48 ルック"},
+       {"subtitle": "Accessories", "image": "/path/to/image.jpg", "body": "バッグ 12 型"},
+       {"subtitle": "Footwear", "image": "/path/to/image.jpg", "body": "シューズ 8 型"}
+     ]},
+    {"type": "quote", "label": "Creative Director", "quote": "\"色彩とは、最も直接的な感情の言語である。\""},
+    {"type": "palette", "secnum": "4.0", "title": "Colour Palette"},
+    {"type": "closing", "title": "Thank You!"}
+  ]
+}
