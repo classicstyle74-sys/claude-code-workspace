@@ -12,7 +12,11 @@ import copy
 
 from pptx.chart.data import CategoryChartData
 from pptx.dml.color import RGBColor
-from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
+from pptx.enum.chart import (
+    XL_CHART_TYPE,
+    XL_LEGEND_POSITION,
+    XL_TICK_LABEL_POSITION,
+)
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.oxml.ns import qn
@@ -178,11 +182,12 @@ def add_text(
     align=PP_ALIGN.LEFT,
     anchor=MSO_ANCHOR.TOP,
     line_spacing=1.2,
+    wrap=True,
 ):
     """トークン準拠のテキストボックス。\n は段落区切り。"""
     box = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
     tf = box.text_frame
-    tf.word_wrap = True
+    tf.word_wrap = wrap
     tf.vertical_anchor = anchor
     tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = 0
     lines = text.split("\n")
@@ -341,6 +346,9 @@ def add_chart(slide, kind, categories, series, x=CONTENT_X, y=CONTENT_Y,
             cat_ax = chart.category_axis
             cat_ax.format.line.color.rgb = INK
             cat_ax.tick_labels.font.size = Pt(9)
+            # 負の値があってもラベルがバーに重ならないよう軸の外側へ
+            if any(v is not None and v < 0 for s in series for v in s["values"]):
+                cat_ax.tick_label_position = XL_TICK_LABEL_POSITION.LOW
         except Exception:
             pass
         if kind in ("column", "bar"):
@@ -359,9 +367,16 @@ def add_stats(slide, items, x=CONTENT_X, y=CONTENT_Y, w=CONTENT_W, h=None):
         tx = x + i * (tile_w + GUTTER)
         add_block(slide, tx, y, tile_w, tile_h, fill)
         pad = 0.18
+        # 値はタイル幅に収まるフォントサイズへ縮小 (折り返し禁止)
+        val = it["value"]
+        val_size = 28 if n <= 3 else 24
+        est_w = len(val) * val_size * 0.0105  # 太字 Helvetica の概算幅 (in/字/pt)
+        max_w = tile_w - 2 * pad
+        if est_w > max_w:
+            val_size = max(14, int(val_size * max_w / est_w))
         add_text(
-            slide, tx + pad, y + pad, tile_w - 2 * pad, 0.65,
-            it["value"], size=28, bold=True, color=tcol,
+            slide, tx + pad, y + pad, max_w, 0.65,
+            val, size=val_size, bold=True, color=tcol, wrap=False,
         )
         add_text(
             slide, tx + pad, y + pad + 0.7, tile_w - 2 * pad, 0.32,
