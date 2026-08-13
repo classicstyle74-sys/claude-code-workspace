@@ -3,6 +3,9 @@ Marni リテール売上分析 雛形スクリプト。
 
 data/*.csv を読み込み、FRAMEWORK.md で定義した分解式・分析軸に沿った集計を行う。
 実データの列名は未確定のため、COLUMN_MAP で吸収する（データ到着後にここを合わせる）。
+
+想定読者は経営会議（HQ）のため、累計（YTD/H1）を主軸に据える。月次推移は補助情報。
+出力は「円」を一次、「%」を補足として揃える（FRAMEWORK.md 6章）。
 """
 
 from __future__ import annotations
@@ -40,6 +43,10 @@ RISK_WEIGHTS = {
     "lost_ratio_increase": 0.05,
 }
 
+# 累計期間の定義（会計年度の起点・上期区切り月）。データ到着後に確定する。
+# 例: 4月始まり決算なら PERIOD_START_MONTH=4, H1は4-9月。
+PERIOD_START_MONTH = 1  # 暫定: 暦年始まり。確定次第変更する。
+
 
 @dataclass
 class AnalysisResult:
@@ -49,6 +56,10 @@ class AnalysisResult:
     by_category: pd.DataFrame = field(default_factory=pd.DataFrame)
     by_customer_segment: pd.DataFrame = field(default_factory=pd.DataFrame)
     at_risk_stores: pd.DataFrame = field(default_factory=pd.DataFrame)
+    cumulative_summary: dict = field(default_factory=dict)
+    gap_decomposition: pd.DataFrame = field(default_factory=pd.DataFrame)
+    store_ranking: pd.DataFrame = field(default_factory=pd.DataFrame)
+    decision_points: pd.DataFrame = field(default_factory=pd.DataFrame)
 
 
 def load_data(data_dir: Path = DATA_DIR) -> pd.DataFrame:
@@ -134,6 +145,94 @@ def compute_risk_score(store_kpi_yoy: pd.DataFrame) -> pd.DataFrame:
         + RISK_WEIGHTS["lost_ratio_increase"] * neg_part(-df["lost_ratio_delta_pt"])
     )
     return df.sort_values("risk_score", ascending=False)
+
+
+def build_cumulative_summary(
+    current_df: pd.DataFrame, prior_df: pd.DataFrame, plan_col: str = "plan_revenue"
+) -> dict:
+    """累計（YTD/H1）のRevenueサマリーを算出する。金額・%の両方を返す（FRAMEWORK.md 2章の主軸）。
+
+    current_df / prior_df は分析対象期間・前年同期間で既にフィルタ済みのDataFrameを渡す想定。
+    期間の切り出し（PERIOD_START_MONTH起点でのYTD/H1判定）はデータ到着後、実際の会計期間定義に
+    合わせてここで実装する。
+    """
+    current_revenue = current_df["revenue"].sum()
+    prior_revenue = prior_df["revenue"].sum()
+    plan_revenue = current_df[plan_col].sum()
+
+    return {
+        "current_revenue": current_revenue,
+        "yoy_diff_amount": current_revenue - prior_revenue,
+        "yoy_diff_pct": current_revenue / prior_revenue - 1 if prior_revenue else None,
+        "vs_plan_diff_amount": current_revenue - plan_revenue,
+        "vs_plan_diff_pct": current_revenue / plan_revenue - 1 if plan_revenue else None,
+    }
+
+
+def compute_gap_decomposition_yen(
+    current_df: pd.DataFrame, prior_df: pd.DataFrame, dimension: str | None = None
+) -> pd.DataFrame:
+    """累計Revenueギャップ（対前年 or 対計画）を Traffic/CVR/ATV要因の金額に分解する。
+
+    dimension を指定すると（例: "store", "category"）、その軸ごとの金額寄与も算出する。
+    分解方法は順次代入法（一方の指標だけ前年→当年に差し替えて差分を測る）を用いる想定。
+    実データ到着後、実際の指標粒度に合わせて実装する。
+    """
+    group_cols = [dimension] if dimension else []
+
+    def agg(df: pd.DataFrame) -> pd.DataFrame:
+        g = df.groupby(group_cols) if group_cols else df
+        return pd.DataFrame(
+            {
+                "revenue": g["revenue"].sum() if group_cols else [df["revenue"].sum()],
+                "traffic": g["traffic"].sum() if group_cols else [df["traffic"].sum()],
+                "transactions": g["transactions"].sum() if group_cols else [df["transactions"].sum()],
+            }
+        )
+
+    current_agg = agg(current_df)
+    prior_agg = agg(prior_df)
+    merged = current_agg.join(prior_agg, lsuffix="", rsuffix="_py", how="outer").fillna(0)
+
+    # Traffic要因: 前年CVR・前年ATVを固定し、Trafficだけ当年に差し替えた場合の差分
+    prior_cvr = merged["transactions_py"] / merged["traffic_py"].replace(0, pd.NA)
+    prior_atv = merged["revenue_py"] / merged["transactions_py"].replace(0, pd.NA)
+    merged["traffic_effect_yen"] = (merged["traffic"] - merged["traffic_py"]) * prior_cvr * prior_atv
+    merged["revenue_gap_yen"] = merged["revenue"] - merged["revenue_py"]
+    merged["other_effect_yen"] = merged["revenue_gap_yen"] - merged["traffic_effect_yen"].fillna(0)
+    return merged.reset_index()
+
+
+def rank_stores_with_driver(store_kpi_yoy: pd.DataFrame, top_n: int = 5) -> pd.DataFrame:
+    """累計ベースの店舗ランキング（上位・下位）に、主ドライバー（Traffic/CVR/ATV）を付与する。
+
+    store_kpi_yoy には yoy_revenue_pct, yoy_traffic_pct, yoy_cvr_pt, yoy_atv_pct が必要。
+    """
+    df = store_kpi_yoy.copy()
+    driver_cols = {
+        "traffic": df["yoy_traffic_pct"].abs(),
+        "cvr": df["yoy_cvr_pt"].abs(),
+        "atv": df["yoy_atv_pct"].abs(),
+    }
+    driver_df = pd.DataFrame(driver_cols)
+    df["primary_driver"] = driver_df.idxmax(axis=1)
+
+    top = df.sort_values("yoy_revenue_pct", ascending=False).head(top_n).assign(rank_group="top")
+    bottom = df.sort_values("yoy_revenue_pct", ascending=True).head(top_n).assign(rank_group="bottom")
+    return pd.concat([top, bottom], ignore_index=True)
+
+
+def identify_decision_points(
+    gap_decomposition: pd.DataFrame, at_risk_stores: pd.DataFrame, max_points: int = 5
+) -> pd.DataFrame:
+    """FRAMEWORK.md 4章の判定ロジックに沿って、経営論点候補を3〜5件に絞り込む。
+
+    現時点では骨組みのみ。実データ到着後、インパクト金額 × 対応可能性のスコアリングを実装する。
+    """
+    raise NotImplementedError(
+        "実データ到着後に実装する: gap_decomposition と at_risk_stores から "
+        "インパクト金額の大きい要因・共通ドライバーを抽出し、最大 max_points 件に絞り込む"
+    )
 
 
 def run_analysis(data_dir: Path = DATA_DIR) -> AnalysisResult:
